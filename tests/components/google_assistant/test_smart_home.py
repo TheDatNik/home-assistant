@@ -14,6 +14,7 @@ from homeassistant.components.google_assistant import (
     const, trait, helpers, smart_home as sh,
     EVENT_COMMAND_RECEIVED, EVENT_QUERY_RECEIVED, EVENT_SYNC_RECEIVED)
 from homeassistant.components.demo.light import DemoLight
+from homeassistant.components.demo.switch import DemoSwitch
 
 from homeassistant.helpers import device_registry
 from tests.common import (mock_device_registry, mock_registry,
@@ -95,7 +96,7 @@ async def test_sync_message(hass):
                     trait.TRAIT_ONOFF,
                     trait.TRAIT_COLOR_SETTING,
                 ],
-                'type': sh.TYPE_LIGHT,
+                'type': const.TYPE_LIGHT,
                 'willReportState': False,
                 'attributes': {
                     'colorModel': 'hsv',
@@ -175,7 +176,7 @@ async def test_sync_in_area(hass, registries):
                     trait.TRAIT_ONOFF,
                     trait.TRAIT_COLOR_SETTING,
                 ],
-                'type': sh.TYPE_LIGHT,
+                'type': const.TYPE_LIGHT,
                 'willReportState': False,
                 'attributes': {
                     'colorModel': 'hsv',
@@ -488,7 +489,7 @@ async def test_serialize_input_boolean(hass):
     """Test serializing an input boolean entity."""
     state = State('input_boolean.bla', 'on')
     # pylint: disable=protected-access
-    entity = sh._GoogleEntity(hass, BASIC_CONFIG, state)
+    entity = sh.GoogleEntity(hass, BASIC_CONFIG, state)
     result = await entity.sync_serialize()
     assert result == {
         'id': 'input_boolean.bla',
@@ -553,6 +554,49 @@ async def test_empty_name_doesnt_sync(hass):
         'payload': {
             'agentUserId': 'test-agent',
             'devices': []
+        }
+    }
+
+
+@pytest.mark.parametrize("device_class,google_type", [
+    ('non_existing_class', 'action.devices.types.SWITCH'),
+    ('switch', 'action.devices.types.SWITCH'),
+    ('outlet', 'action.devices.types.OUTLET')
+])
+async def test_device_class_switch(hass, device_class, google_type):
+    """Test that a cover entity syncs to the correct device type."""
+    sensor = DemoSwitch(
+        'Demo Sensor',
+        state=False,
+        icon='mdi:switch',
+        assumed=False,
+        device_class=device_class
+    )
+    sensor.hass = hass
+    sensor.entity_id = 'switch.demo_sensor'
+    await sensor.async_update_ha_state()
+
+    result = await sh.async_handle_message(
+        hass, BASIC_CONFIG, 'test-agent',
+        {
+            "requestId": REQ_ID,
+            "inputs": [{
+                "intent": "action.devices.SYNC"
+            }]
+        })
+
+    assert result == {
+        'requestId': REQ_ID,
+        'payload': {
+            'agentUserId': 'test-agent',
+            'devices': [{
+                'attributes': {},
+                'id': 'switch.demo_sensor',
+                'name': {'name': 'Demo Sensor'},
+                'traits': ['action.devices.traits.OnOff'],
+                'type': google_type,
+                'willReportState': False
+            }]
         }
     }
 
